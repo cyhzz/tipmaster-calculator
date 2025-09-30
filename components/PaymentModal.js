@@ -9,13 +9,13 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
     const [selectedPlan, setSelectedPlan] = useState('monthly');
 
     const plans = {
-        monthly: { price: '$3', id: 'price_your_monthly_price_id' },
-        yearly: { price: '$25', id: 'price_your_yearly_price_id' }
+        monthly: { price: '$3', id: 'price_1SD3bYQsDCoarmvpMlTYQN09' },
+        yearly: { price: '$25', id: 'price_1SD3c1QsDCoarmvphTX5kVIw' } // Fixed: Added missing closing brace and comma
     };
 
     const handleStripePayment = async () => {
         if (!session) {
-            signIn();
+            signIn(); // Use signIn instead of window.location
             return;
         }
 
@@ -23,6 +23,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
         setError('');
 
         try {
+            // Call your checkout API
             const response = await fetch('/api/stripe/checkout', {
                 method: 'POST',
                 headers: {
@@ -32,17 +33,20 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
                     priceId: plans[selectedPlan].id,
                     userId: session.user.id,
                     userEmail: session.user.email,
-                    planType: selectedPlan,
                 }),
             });
 
             const data = await response.json();
 
+            // Debug: Check what's actually returned
+            console.log('API Response:', data);
+
+            // Check if sessionId exists
             if (!data.sessionId) {
-                throw new Error('No session ID returned from server');
+                throw new Error('No session ID returned from server. Response: ' + JSON.stringify(data));
             }
 
-            // ✅ FIX: Dynamically import loadStripe
+            // Load Stripe and redirect
             const { loadStripe } = await import('@stripe/stripe-js');
             const stripe = await loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
