@@ -11,6 +11,7 @@ export const authOptions = {
         }),
         // You can add more providers here (Email, GitHub, etc.)
     ],
+    debug: true,
     adapter: SupabaseAdapter({
         url: process.env.NEXT_PUBLIC_SUPABASE_URL,
         secret: process.env.SUPABASE_SERVICE_ROLE_KEY,
