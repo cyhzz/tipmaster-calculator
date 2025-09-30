@@ -69,8 +69,8 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
                     <button
                         onClick={() => setSelectedPlan('monthly')}
                         className={`p-4 border rounded-lg text-center transition-all ${selectedPlan === 'monthly'
-                                ? 'border-blue-500 bg-blue-50'
-                                : 'border-gray-300 hover:border-gray-400'
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-300 hover:border-gray-400'
                             }`}
                     >
                         <div className="font-bold text-lg">Monthly</div>
@@ -81,8 +81,8 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
                     <button
                         onClick={() => setSelectedPlan('yearly')}
                         className={`p-4 border rounded-lg text-center transition-all ${selectedPlan === 'yearly'
-                                ? 'border-blue-500 bg-blue-50'
-                                : 'border-gray-300 hover:border-gray-400'
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-300 hover:border-gray-400'
                             }`}
                     >
                         <div className="font-bold text-lg">Yearly</div>
@@ -105,7 +105,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
                 {!session && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
                         <p className="text-sm text-yellow-800">
-                            You'll need to create an account to subscribe.
+                            You&apos;ll need to create an account to subscribe.
                         </p>
                     </div>
                 )}
