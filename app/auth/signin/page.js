@@ -1,15 +1,32 @@
 // app/auth/signin/page.js - FIXED VERSION
 'use client';
 import { signIn } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 
 export default function SignIn() {
+    const [isClient, setIsClient] = useState(false);
+    const [envStatus, setEnvStatus] = useState({
+        nextauthUrl: '❌ Checking...',
+        googleClientId: '❌ Checking...',
+        currentUrl: '❌ Checking...'
+    });
+
+    useEffect(() => {
+        // This code only runs on the client
+        setIsClient(true);
+        setEnvStatus({
+            nextauthUrl: process.env.NEXT_PUBLIC_NEXTAUTH_URL ? '✅' : '❌',
+            googleClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? '✅' : '❌',
+            currentUrl: window.location.origin
+        });
+    }, []);
+
     const handleSignIn = async () => {
+        if (!isClient) return;
+
         console.log('Attempting Google sign-in...');
-        console.log('NEXTAUTH_URL:', process.env.NEXT_PUBLIC_NEXTAUTH_URL);
-        console.log('GOOGLE_CLIENT_ID exists:', !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
         try {
-            // Use the full URL for callback to ensure proper redirect
             const callbackUrl = `${window.location.origin}/`;
 
             const result = await signIn('google', {
@@ -25,10 +42,10 @@ export default function SignIn() {
         }
     };
 
-    // Check if environment variables are available
-    const envStatus = {
-        nextauthUrl: process.env.NEXT_PUBLIC_NEXTAUTH_URL ? '✅' : '❌',
-        googleClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? '✅' : '❌',
+    const handleBackToCalculator = () => {
+        if (isClient) {
+            window.location.href = '/';
+        }
     };
 
     return (
@@ -48,7 +65,8 @@ export default function SignIn() {
                     <div className="space-y-4">
                         <button
                             onClick={handleSignIn}
-                            className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-all"
+                            disabled={!isClient}
+                            className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 py-3 rounded-lg font-medium hover:bg-gray-50 transition-all disabled:opacity-50"
                         >
                             <svg className="w-5 h-5" viewBox="0 0 24 24">
                                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -61,23 +79,26 @@ export default function SignIn() {
 
                         <div className="text-center">
                             <button
-                                onClick={() => window.location.href = '/'}
-                                className="text-blue-600 hover:text-blue-700 text-sm"
+                                onClick={handleBackToCalculator}
+                                disabled={!isClient}
+                                className="text-blue-600 hover:text-blue-700 text-sm disabled:opacity-50"
                             >
                                 ← Back to Calculator
                             </button>
                         </div>
                     </div>
 
-                    {/* Environment Status */}
-                    <div className="mt-6 p-4 bg-gray-50 rounded-lg text-left">
-                        <h3 className="font-semibold text-gray-800 mb-2">Environment Status:</h3>
-                        <div className="text-xs text-gray-600 space-y-1">
-                            <div>NEXTAUTH_URL: {envStatus.nextauthUrl} {process.env.NEXT_PUBLIC_NEXTAUTH_URL || 'Not set'}</div>
-                            <div>GOOGLE_CLIENT_ID: {envStatus.googleClientId} {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? 'Set' : 'Not set'}</div>
-                            <div>Current URL: {window.location.origin}</div>
+                    {/* Environment Status - Only show on client */}
+                    {isClient && (
+                        <div className="mt-6 p-4 bg-gray-50 rounded-lg text-left">
+                            <h3 className="font-semibold text-gray-800 mb-2">Environment Status:</h3>
+                            <div className="text-xs text-gray-600 space-y-1">
+                                <div>NEXTAUTH_URL: {envStatus.nextauthUrl} {process.env.NEXT_PUBLIC_NEXTAUTH_URL || 'Not set'}</div>
+                                <div>GOOGLE_CLIENT_ID: {envStatus.googleClientId} {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? 'Set' : 'Not set'}</div>
+                                <div>Current URL: {envStatus.currentUrl}</div>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>
