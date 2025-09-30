@@ -48,36 +48,57 @@ export async function POST(request) {
 
                 console.log('📋 Plan type:', planType);
 
-                // 1. Save purchase to Supabase
+                // Check if user exists in auth.users before proceeding
+                let userId = session.metadata?.userId;
+                let userExists = false;
+
+                if (userId) {
+                    console.log('🔍 Checking if user exists in Supabase Auth:', userId);
+                    const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(userId);
+
+                    if (authError || !authUser) {
+                        console.log('⚠️ User not found in Supabase Auth, will proceed without user_id');
+                        userId = null; // Don't use the user_id if it doesn't exist in auth
+                    } else {
+                        userExists = true;
+                        console.log('✅ User found in Supabase Auth:', authUser.user.email);
+                    }
+                }
+
+                // 1. Save purchase to Supabase (with or without user_id)
                 console.log('💾 Saving purchase to Supabase...');
-                const { data: purchaseData, error: purchaseError } = await supabase
+                const purchaseData = {
+                    user_id: userExists ? userId : null, // Only set user_id if user exists in auth
+                    user_email: session.customer_email,
+                    stripe_session_id: session.id,
+                    stripe_customer_id: session.customer,
+                    price_id: session.metadata?.priceId,
+                    amount: session.amount_total,
+                    currency: session.currency,
+                    status: 'active',
+                    plan_type: planType
+                };
+
+                console.log('Purchase data to insert:', purchaseData);
+
+                const { data: purchaseResult, error: purchaseError } = await supabase
                     .from('purchases')
-                    .insert({
-                        user_id: session.metadata?.userId,
-                        user_email: session.customer_email,
-                        stripe_session_id: session.id,
-                        stripe_customer_id: session.customer,
-                        price_id: session.metadata?.priceId,
-                        amount: session.amount_total,
-                        currency: session.currency,
-                        status: 'active',
-                        plan_type: planType
-                    })
+                    .insert(purchaseData)
                     .select();
 
                 if (purchaseError) {
                     console.error('❌ Error saving purchase:', purchaseError);
                     throw new Error(`Failed to save purchase: ${purchaseError.message}`);
                 }
-                console.log('✅ Purchase saved:', purchaseData);
+                console.log('✅ Purchase saved:', purchaseResult);
 
-                // 2. Update user to pro status
-                if (session.metadata?.userId) {
+                // 2. Update user profile if user exists
+                if (userExists && userId) {
                     console.log('👤 Updating user profile to pro...');
                     const { data: profileData, error: profileError } = await supabase
                         .from('user_profiles')
                         .upsert({
-                            id: session.metadata.userId,
+                            id: userId,
                             email: session.customer_email,
                             is_pro: true,
                             plan_type: planType,
@@ -91,11 +112,13 @@ export async function POST(request) {
 
                     if (profileError) {
                         console.error('❌ Error updating user profile:', profileError);
-                        throw new Error(`Failed to update user profile: ${profileError.message}`);
+                        // Don't throw error here - purchase was successful
+                        console.log('⚠️ Continuing without user profile update');
+                    } else {
+                        console.log('✅ User profile updated:', profileData);
                     }
-                    console.log('✅ User profile updated:', profileData);
                 } else {
-                    console.log('⚠️ No userId in metadata, skipping user profile update');
+                    console.log('⚠️ No valid userId, skipping user profile update');
                 }
 
                 console.log('🎉 Purchase processed successfully for:', session.customer_email);
