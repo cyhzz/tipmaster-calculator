@@ -19,8 +19,8 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
 
     const handleStripePayment = async () => {
         if (!session) {
-            // Redirect to auth if not signed in
-            await signIn('google', { callbackUrl: window.location.href });
+            // Redirect to automatic NextAuth sign-in page
+            window.location.href = '/api/auth/signin';
             return;
         }
 
