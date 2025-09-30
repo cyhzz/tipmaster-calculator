@@ -66,7 +66,7 @@ export default function PaymentSuccess() {
                     </p>
 
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-left">
-                        <h3 className="font-semibold text-green-800 mb-2">What's unlocked:</h3>
+                        <h3 className="font-semibold text-green-800 mb-2">What&apos;s unlocked:</h3>
                         <ul className="text-sm text-green-700 space-y-1">
                             <li>✅ Different tips per person</li>
                             <li>✅ Advanced tax calculations</li>
