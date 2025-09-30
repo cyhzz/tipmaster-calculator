@@ -1,21 +1,34 @@
-// app/auth/signin/page.js - DEBUG VERSION
+// app/auth/signin/page.js - FIXED VERSION
 'use client';
 import { signIn } from 'next-auth/react';
 
 export default function SignIn() {
     const handleSignIn = async () => {
         console.log('Attempting Google sign-in...');
+        console.log('NEXTAUTH_URL:', process.env.NEXT_PUBLIC_NEXTAUTH_URL);
+        console.log('GOOGLE_CLIENT_ID exists:', !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
         try {
+            // Use the full URL for callback to ensure proper redirect
+            const callbackUrl = `${window.location.origin}/`;
+
             const result = await signIn('google', {
-                callbackUrl: '/',
+                callbackUrl,
                 redirect: true
             });
 
-            console.log('SignIn result:', result);
+            if (result?.error) {
+                console.error('SignIn error result:', result);
+            }
         } catch (error) {
-            console.error('SignIn error:', error);
+            console.error('SignIn catch error:', error);
         }
+    };
+
+    // Check if environment variables are available
+    const envStatus = {
+        nextauthUrl: process.env.NEXT_PUBLIC_NEXTAUTH_URL ? '✅' : '❌',
+        googleClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? '✅' : '❌',
     };
 
     return (
@@ -56,13 +69,13 @@ export default function SignIn() {
                         </div>
                     </div>
 
-                    {/* Debug Info */}
+                    {/* Environment Status */}
                     <div className="mt-6 p-4 bg-gray-50 rounded-lg text-left">
-                        <h3 className="font-semibold text-gray-800 mb-2">Debug Info:</h3>
+                        <h3 className="font-semibold text-gray-800 mb-2">Environment Status:</h3>
                         <div className="text-xs text-gray-600 space-y-1">
-                            <div>NEXTAUTH_URL: {process.env.NEXTAUTH_URL ? '✅ Set' : '❌ Missing'}</div>
-                            <div>GOOGLE_CLIENT_ID: {process.env.GOOGLE_CLIENT_ID ? '✅ Set' : '❌ Missing'}</div>
-                            <div>Redirect URI: https://tipmaster-calculator.vercel.app/api/auth/callback/google</div>
+                            <div>NEXTAUTH_URL: {envStatus.nextauthUrl} {process.env.NEXT_PUBLIC_NEXTAUTH_URL || 'Not set'}</div>
+                            <div>GOOGLE_CLIENT_ID: {envStatus.googleClientId} {process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? 'Set' : 'Not set'}</div>
+                            <div>Current URL: {window.location.origin}</div>
                         </div>
                     </div>
                 </div>
