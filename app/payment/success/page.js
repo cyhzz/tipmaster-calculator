@@ -1,10 +1,11 @@
 // app/payment/success/page.js
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function PaymentSuccess() {
+// Create a component that uses useSearchParams
+function PaymentSuccessContent() {
     const searchParams = useSearchParams();
     const sessionId = searchParams.get('session_id');
     const [isLoading, setIsLoading] = useState(true);
@@ -37,6 +38,8 @@ export default function PaymentSuccess() {
 
         if (sessionId) {
             verifyPayment();
+        } else {
+            setIsLoading(false);
         }
     }, [sessionId]);
 
@@ -97,5 +100,22 @@ export default function PaymentSuccess() {
                 </div>
             </div>
         </div>
+    );
+}
+
+// Main component with Suspense boundary
+export default function PaymentSuccess() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+                <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <h2 className="text-xl font-bold text-gray-800 mb-2">Loading...</h2>
+                    <p className="text-gray-600">Preparing your payment details...</p>
+                </div>
+            </div>
+        }>
+            <PaymentSuccessContent />
+        </Suspense>
     );
 }
