@@ -1,26 +1,21 @@
-// components/PaymentModal.js - UPDATED FOR REAL PAYMENTS
 'use client';
 import { useState } from 'react';
 import { useSession, signIn } from 'next-auth/react';
-import { useStripe, useElements, CardElement } from '@stripe/react-stripe-js';
 
 export default function PaymentModal({ isOpen, onClose, onSuccess }) {
-    const stripe = useStripe();
-    const elements = useElements();
     const { data: session } = useSession();
     const [isProcessing, setIsProcessing] = useState(false);
     const [error, setError] = useState('');
     const [selectedPlan, setSelectedPlan] = useState('monthly');
 
     const plans = {
-        monthly: { price: '$3', id: 'price_your_monthly_price_id' },
-        yearly: { price: '$25', id: 'price_your_yearly_price_id' }
+        monthly: { price: '$3', id: 'price_1SD3bYQsDCoarmvpMlTYQN09' },
+        yearly: { price: '$25', id: 'price_1SD3c1QsDCoarmvphTX5kVIw' }
     };
 
     const handleStripePayment = async () => {
         if (!session) {
-            // Redirect to automatic NextAuth sign-in page
-            window.location.href = '/api/auth/signin';
+            signIn(); // Use signIn instead of window.location
             return;
         }
 
@@ -28,6 +23,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
         setError('');
 
         try {
+            // Call your checkout API
             const response = await fetch('/api/stripe/checkout', {
                 method: 'POST',
                 headers: {
@@ -40,17 +36,34 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
                 }),
             });
 
-            const { sessionId } = await response.json();
+            const data = await response.json();
 
-            // Redirect to Stripe Checkout
-            const stripe = await loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
-            const { error } = await stripe.redirectToCheckout({ sessionId });
+            // Debug: Check what's actually returned
+            console.log('API Response:', data);
 
-            if (error) {
-                setError(error.message);
+            // Check if sessionId exists
+            if (!data.sessionId) {
+                throw new Error('No session ID returned from server. Response: ' + JSON.stringify(data));
             }
+
+            // Load Stripe and redirect
+            const { loadStripe } = await import('@stripe/stripe-js');
+            const stripe = await loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+
+            if (!stripe) {
+                throw new Error('Stripe failed to load');
+            }
+
+            const { error: stripeError } = await stripe.redirectToCheckout({
+                sessionId: data.sessionId
+            });
+
+            if (stripeError) {
+                throw stripeError;
+            }
+
         } catch (err) {
-            setError('Payment failed. Please try again.');
+            setError(err.message || 'Payment failed. Please try again.');
             console.error('Payment error:', err);
         } finally {
             setIsProcessing(false);
@@ -105,7 +118,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
                 {!session && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
                         <p className="text-sm text-yellow-800">
-                            You&apos;ll need to create an account to subscribe.
+                            You'll need to create an account to subscribe.
                         </p>
                     </div>
                 )}
