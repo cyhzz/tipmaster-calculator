@@ -118,7 +118,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
                 {!session && (
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
                         <p className="text-sm text-yellow-800">
-                            You'll need to create an account to subscribe.
+                            You&apos;ll need to create an account to subscribe.
                         </p>
                     </div>
                 )}
