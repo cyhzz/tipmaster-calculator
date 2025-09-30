@@ -15,7 +15,7 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
 
     const handleStripePayment = async () => {
         if (!session) {
-            signIn(); // Use signIn instead of window.location
+            signIn('google', { callbackUrl: window.location.href });
             return;
         }
 
@@ -23,27 +23,26 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
         setError('');
 
         try {
-            // Call your checkout API
-            const response = await fetch('/api/stripe/checkout', {
+            // Call our API to get Supabase user ID and create checkout session
+            const response = await fetch('/api/stripe/create-checkout', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                     priceId: plans[selectedPlan].id,
-                    userId: session.user.id,
                     userEmail: session.user.email,
                 }),
             });
 
             const data = await response.json();
 
-            // Debug: Check what's actually returned
-            console.log('API Response:', data);
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to create checkout session');
+            }
 
-            // Check if sessionId exists
             if (!data.sessionId) {
-                throw new Error('No session ID returned from server. Response: ' + JSON.stringify(data));
+                throw new Error('No session ID returned from server');
             }
 
             // Load Stripe and redirect

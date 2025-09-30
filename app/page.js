@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import StripeProvider from '../components/StripeProvider';
 import PaymentModal from '../components/PaymentModal';
 import ShareModal from '../components/ShareModal';
-import { useSession, signIn } from 'next-auth/react';
+import { useSession, signIn, signOut } from 'next-auth/react';
 import { loadStripe } from '@stripe/stripe-js';
 
 function TipCalculator() {
@@ -23,12 +23,16 @@ function TipCalculator() {
   const [isPro, setIsPro] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [user, setUser] = useState(null);
+  const [isLoadingProStatus, setIsLoadingProStatus] = useState(false);
 
   // Share state
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [isCopied, setIsCopied] = useState(false);
   const [errors, setErrors] = useState({});
+
+  // NextAuth session
+  const { data: session } = useSession();
 
   // Load user data from localStorage on component mount
   useEffect(() => {
@@ -44,7 +48,117 @@ function TipCalculator() {
     if (savedHistory) {
       setCalculationHistory(JSON.parse(savedHistory));
     }
-  }, []);
+  }, []); // Empty dependency array - runs only once
+
+  // Combined effect for session changes - RUNS ONLY WHEN SESSION CHANGES
+  useEffect(() => {
+    const handleSessionChange = async () => {
+      if (session?.user) {
+        // User signed in
+        setIsLoadingProStatus(true);
+
+        try {
+          // Sync user first
+          console.log('🔄 Syncing user to Supabase...');
+          const syncResponse = await fetch('/api/auth/sync-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          const syncData = await syncResponse.json();
+
+          if (syncResponse.ok) {
+            console.log('✅ User synced to Supabase:', syncData.userId);
+          }
+
+          // Then check Pro status
+          console.log('🔍 Checking Pro status...');
+          const statusResponse = await fetch('/api/auth/check-pro-status');
+          const statusData = await statusResponse.json();
+
+          console.log('📄 Pro status response:', statusData);
+
+          if (statusResponse.ok) {
+            const shouldBePro = statusData.isPro === true;
+            console.log('✅ Setting Pro status to:', shouldBePro);
+            setIsPro(shouldBePro);
+
+            const userData = {
+              id: statusData.stripeCustomerId || session.user.id,
+              email: session.user.email,
+              name: session.user.name,
+              isPro: shouldBePro,
+              planType: statusData.planType,
+              proSince: statusData.proSince,
+              joined: statusData.proSince || new Date().toISOString()
+            };
+
+            setUser(userData);
+            localStorage.setItem('tipmaster-user', JSON.stringify(userData));
+
+            if (shouldBePro) {
+              setAdvancedMode(true);
+            } else {
+              setAdvancedMode(false);
+            }
+          } else {
+            setIsPro(false);
+            setAdvancedMode(false);
+          }
+        } catch (error) {
+          console.error('💥 Error during session setup:', error);
+          setIsPro(false);
+          setAdvancedMode(false);
+        } finally {
+          setIsLoadingProStatus(false);
+        }
+      } else {
+        // User signed out
+        console.log('👋 User signed out');
+        setIsPro(false);
+        setAdvancedMode(false);
+
+        const savedUser = localStorage.getItem('tipmaster-user');
+        if (savedUser) {
+          const userData = JSON.parse(savedUser);
+          setUser({ ...userData, isPro: false });
+        }
+      }
+    };
+
+    handleSessionChange();
+  }, [session]); // Only depend on session object
+
+  // // Real-time Pro status updates
+  // useEffect(() => {
+  //   let intervalId;
+
+  //   if (session?.user && isPro) {
+  //     // Check Pro status every 2 minutes to catch subscription changes
+  //     intervalId = setInterval(async () => {
+  //       try {
+  //         const response = await fetch('/api/auth/check-pro-status');
+  //         const data = await response.json();
+
+  //         if (response.ok && data.isPro !== isPro) {
+  //           console.log('🔄 Pro status changed:', data.isPro);
+  //           setIsPro(data.isPro);
+
+  //           if (!data.isPro) {
+  //             setAdvancedMode(false); // Disable advanced mode if no longer Pro
+  //           }
+  //         }
+  //       } catch (error) {
+  //         console.error('Error checking Pro status:', error);
+  //       }
+  //     }, 120000); // 2 minutes
+  //   }
+
+  //   return () => {
+  //     if (intervalId) {
+  //       clearInterval(intervalId);
+  //     }
+  //   };
+  // }, [session, isPro]);
 
   // Validation
   const validateInputs = () => {
@@ -125,21 +239,89 @@ function TipCalculator() {
   }, [numberOfPeople, advancedMode, tipPercentage, isPro]);
 
   // Handle payment success
-  const handlePaymentSuccess = () => {
-    const userData = {
-      id: Date.now(),
-      email: 'user@example.com',
-      isPro: true,
-      joined: new Date().toISOString(),
-      subscription: 'monthly'
-    };
+  const handlePaymentSuccess = async () => {
+    // Immediately check Pro status after payment
+    try {
+      const response = await fetch('/api/auth/check-pro-status');
+      const data = await response.json();
 
-    setUser(userData);
-    setIsPro(true);
-    localStorage.setItem('tipmaster-user', JSON.stringify(userData));
+      if (response.ok && data.isPro) {
+        setIsPro(true);
+        setAdvancedMode(true);
 
-    // Enable advanced mode after payment
-    setAdvancedMode(true);
+        const userData = {
+          id: data.stripeCustomerId || session.user.id,
+          email: session.user.email,
+          name: session.user.name,
+          isPro: true,
+          planType: data.planType,
+          proSince: data.proSince,
+          joined: data.proSince || new Date().toISOString()
+        };
+
+        setUser(userData);
+        localStorage.setItem('tipmaster-user', JSON.stringify(userData));
+
+        console.log('🎉 Payment successful! Pro features activated.');
+      } else {
+        // If not immediately active, show loading state
+        console.log('⏳ Payment processed, waiting for activation...');
+        setIsPro(true); // Optimistically enable
+      }
+    } catch (error) {
+      console.error('Error checking Pro status after payment:', error);
+      // Fallback: optimistically enable Pro features
+      setIsPro(true);
+      setAdvancedMode(true);
+    }
+  };
+
+  // Manual Pro status check
+  const checkProStatus = async () => {
+    if (session?.user) {
+      setIsLoadingProStatus(true);
+      try {
+        console.log('🔍 Manually checking Pro status...');
+        const response = await fetch('/api/auth/check-pro-status');
+        const data = await response.json();
+
+        console.log('📄 Manual check response:', data);
+
+        if (response.ok) {
+          // ONLY set isPro to true if the API explicitly returns true
+          const shouldBePro = data.isPro === true;
+          console.log('✅ Manually setting Pro status to:', shouldBePro);
+          setIsPro(shouldBePro);
+
+          const userData = {
+            id: data.stripeCustomerId || session.user.id,
+            email: session.user.email,
+            name: session.user.name,
+            isPro: shouldBePro, // Use the actual value from API
+            planType: data.planType,
+            proSince: data.proSince,
+            joined: data.proSince || new Date().toISOString()
+          };
+
+          setUser(userData);
+          localStorage.setItem('tipmaster-user', JSON.stringify(userData));
+
+          // Only enable advanced mode if user is actually Pro
+          if (shouldBePro) {
+            setAdvancedMode(true);
+          } else {
+            setAdvancedMode(false);
+          }
+        }
+      } catch (error) {
+        console.error('💥 Error checking Pro status:', error);
+        // On error, assume not Pro
+        setIsPro(false);
+        setAdvancedMode(false);
+      } finally {
+        setIsLoadingProStatus(false);
+      }
+    }
   };
 
   // Share functionality
@@ -232,7 +414,7 @@ function TipCalculator() {
     try {
       // Ensure user is authenticated
       if (!session) {
-        setShowAuthModal(true);
+        signIn('google');
         return;
       }
 
@@ -267,7 +449,6 @@ function TipCalculator() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
       <div className="max-w-md mx-auto">
         {/* Header with User Status */}
-
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
             <span className="text-3xl">🧮</span>
@@ -279,6 +460,31 @@ function TipCalculator() {
           <p className="text-gray-600">
             {isPro ? 'Premium tip calculator for groups' : 'Smart tip calculator for groups'}
           </p>
+
+          {/* Login/Sign Out Section */}
+          <div className="mt-3">
+            {!session ? (
+              <button
+                onClick={() => signIn('google')}
+                className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition-all flex items-center gap-2 mx-auto"
+              >
+                <span>🔐</span>
+                Sign In with Google
+              </button>
+            ) : (
+              <div className="flex items-center justify-center gap-2 text-sm">
+                <span className="text-gray-600">
+                  👋 Hello, {session.user.name || session.user.email}
+                </span>
+                <button
+                  onClick={() => signOut()}
+                  className="text-red-600 hover:text-red-700 underline"
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Add marketing link */}
           <a
@@ -294,6 +500,10 @@ function TipCalculator() {
           className={`rounded-2xl shadow-lg p-4 mb-4 cursor-pointer transition-all ${isPro ? 'bg-white hover:shadow-xl' : 'bg-gray-100 opacity-75'
             }`}
           onClick={() => {
+            if (!session) {
+              signIn('google');
+              return;
+            }
             if (!isPro) {
               setShowPaymentModal(true);
               return;
@@ -327,7 +537,7 @@ function TipCalculator() {
           )}
           {!isPro && (
             <p className="text-xs text-gray-600 mt-2">
-              Upgrade to Pro to unlock advanced features
+              {session ? 'Upgrade to Pro to unlock advanced features' : 'Sign in to access advanced features'}
             </p>
           )}
         </div>
@@ -357,7 +567,13 @@ function TipCalculator() {
           <div
             className={`mb-6 p-4 rounded-lg transition-all ${isPro ? 'bg-white' : 'bg-gray-50 opacity-75'
               }`}
-            onClick={() => !isPro && setShowPaymentModal(true)}
+            onClick={() => {
+              if (!session) {
+                signIn('google');
+                return;
+              }
+              !isPro && setShowPaymentModal(true);
+            }}
           >
             <div className="flex items-center gap-2 mb-2">
               <span>🏷️</span>
@@ -394,7 +610,7 @@ function TipCalculator() {
               </>
             ) : (
               <p className="text-xs text-gray-600">
-                Upgrade to Pro to customize tax settings
+                {session ? 'Upgrade to Pro to customize tax settings' : 'Sign in to access tax settings'}
               </p>
             )}
           </div>
@@ -591,6 +807,9 @@ function TipCalculator() {
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xl">💎</span>
               <h3 className="font-semibold">TipMaster Pro</h3>
+              {isLoadingProStatus && (
+                <span className="text-xs bg-yellow-500 px-2 py-1 rounded ml-auto">Checking...</span>
+              )}
             </div>
             <ul className="text-sm space-y-2 mb-4">
               <li className="flex items-center gap-2">✅ Different tips per person</li>
@@ -600,23 +819,47 @@ function TipCalculator() {
               <li className="flex items-center gap-2">✅ Share calculations</li>
               <li className="flex items-center gap-2">✅ No ads</li>
             </ul>
-            <button
-              onClick={() => setShowPaymentModal(true)}
-              className="w-full bg-white text-purple-600 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-all"
-            >
-              Upgrade to Pro - $3/month
-            </button>
-            <p className="text-xs text-center mt-2 text-white/80">Try premium features FREE for 7 days</p>
+
+            {/* Show login button if not signed in */}
+            {!session ? (
+              <button
+                onClick={() => signIn('google')}
+                className="w-full bg-white text-purple-600 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-all mb-2"
+              >
+                🔐 Sign In to Upgrade
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowPaymentModal(true)}
+                className="w-full bg-white text-purple-600 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-all"
+              >
+                Upgrade to Pro - $3/month
+              </button>
+            )}
+
+            <p className="text-xs text-center mt-2 text-white/80">
+              {!session ? 'Sign in to access premium features' : 'Try premium features FREE for 7 days'}
+            </p>
           </div>
         ) : (
           <div className="bg-green-50 rounded-2xl shadow-lg p-6 border border-green-200">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xl">🎉</span>
-              <h3 className="font-semibold text-green-800">You&apos;re a Pro Member!</h3>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🎉</span>
+                <h3 className="font-semibold text-green-800">You&apos;re a Pro Member!</h3>
+              </div>
+              <button
+                onClick={checkProStatus}
+                disabled={isLoadingProStatus}
+                className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-50"
+              >
+                {isLoadingProStatus ? '🔄' : '↻'}
+              </button>
             </div>
             <p className="text-sm text-green-600">Thank you for supporting TipMaster. Enjoy all premium features.</p>
             <div className="mt-3 text-xs text-green-500">
               Member since: {user?.joined ? new Date(user.joined).toLocaleDateString() : 'Recently'}
+              {user?.planType && ` • ${user.planType} plan`}
             </div>
           </div>
         )}
