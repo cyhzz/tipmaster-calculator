@@ -261,7 +261,7 @@ export default function MarketingPage() {
                     <div className="border border-gray-200 rounded-lg p-6">
                         <h3 className="text-lg font-semibold text-gray-800 mb-2">Do you store my calculation data?</h3>
                         <p className="text-gray-600">
-                            Your calculations are stored locally on your device. We don't send your bill data to our servers. For Pro users, history is saved in your browser's local storage.
+                            Your calculations are stored locally on your device. We don&apos;t send your bill data to our servers. For Pro users, history is saved in your browser&apos;s local storage.
                         </p>
                     </div>
                 </div>
