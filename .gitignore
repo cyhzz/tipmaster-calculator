@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.next/
+
+# Environment variables
+.env
+.env.local
+
+# Build outputs
+.next/
+out/
+dist/
+
+# Cache
+.cache
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
