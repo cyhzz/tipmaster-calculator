@@ -1,121 +1,141 @@
-// app/payment/success/page.js
+// components/PaymentModal.js - UPDATED FOR REAL PAYMENTS
 'use client';
-import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
+import { useState } from 'react';
+import { useSession, signIn } from 'next-auth/react';
+import { useStripe, useElements, CardElement } from '@stripe/react-stripe-js';
 
-// Create a component that uses useSearchParams
-function PaymentSuccessContent() {
-    const searchParams = useSearchParams();
-    const sessionId = searchParams.get('session_id');
-    const [isLoading, setIsLoading] = useState(true);
-    const [isPro, setIsPro] = useState(false);
+export default function PaymentModal({ isOpen, onClose, onSuccess }) {
+    const stripe = useStripe();
+    const elements = useElements();
+    const { data: session } = useSession();
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [error, setError] = useState('');
+    const [selectedPlan, setSelectedPlan] = useState('monthly');
 
-    useEffect(() => {
-        // Verify payment and activate pro features
-        const verifyPayment = async () => {
-            try {
-                // In a real app, you'd verify with your backend
-                // For now, we'll simulate success
-                await new Promise(resolve => setTimeout(resolve, 2000));
+    const plans = {
+        monthly: { price: '$3', id: 'price_your_monthly_price_id' },
+        yearly: { price: '$25', id: 'price_your_yearly_price_id' }
+    };
 
-                // Activate pro features
-                localStorage.setItem('tipmaster-user', JSON.stringify({
-                    id: 'user_' + Date.now(),
-                    email: 'user@example.com',
-                    isPro: true,
-                    joined: new Date().toISOString(),
-                    subscription: 'active'
-                }));
-
-                setIsPro(true);
-            } catch (error) {
-                console.error('Payment verification failed:', error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        if (sessionId) {
-            verifyPayment();
-        } else {
-            setIsLoading(false);
+    const handleStripePayment = async () => {
+        if (!session) {
+            // Redirect to auth if not signed in
+            await signIn('google', { callbackUrl: window.location.href });
+            return;
         }
-    }, [sessionId]);
 
-    if (isLoading) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-                <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <h2 className="text-xl font-bold text-gray-800 mb-2">Activating Your Pro Account</h2>
-                    <p className="text-gray-600">Please wait while we set up your premium features...</p>
-                </div>
-            </div>
-        );
-    }
+        setIsProcessing(true);
+        setError('');
+
+        try {
+            const response = await fetch('/api/stripe/checkout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    priceId: plans[selectedPlan].id,
+                    userId: session.user.id,
+                    userEmail: session.user.email,
+                }),
+            });
+
+            const { sessionId } = await response.json();
+
+            // Redirect to Stripe Checkout
+            const stripe = await loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+            const { error } = await stripe.redirectToCheckout({ sessionId });
+
+            if (error) {
+                setError(error.message);
+            }
+        } catch (err) {
+            setError('Payment failed. Please try again.');
+            console.error('Payment error:', err);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    if (!isOpen) return null;
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-            <div className="max-w-md w-full">
-                <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <span className="text-2xl">🎉</span>
-                    </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+                <h2 className="text-2xl font-bold mb-4">Upgrade to TipMaster Pro</h2>
 
-                    <h1 className="text-3xl font-bold text-gray-800 mb-2">Welcome to TipMaster Pro!</h1>
-                    <p className="text-gray-600 mb-6">
-                        Your payment was successful and all premium features are now unlocked.
-                    </p>
+                {/* Plan Selection */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                    <button
+                        onClick={() => setSelectedPlan('monthly')}
+                        className={`p-4 border rounded-lg text-center transition-all ${selectedPlan === 'monthly'
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                    >
+                        <div className="font-bold text-lg">Monthly</div>
+                        <div className="text-2xl font-bold text-gray-800">$3</div>
+                        <div className="text-sm text-gray-600">per month</div>
+                    </button>
 
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-left">
-                        <h3 className="font-semibold text-green-800 mb-2">What&apos;s unlocked:</h3>
-                        <ul className="text-sm text-green-700 space-y-1">
-                            <li>✅ Different tips per person</li>
-                            <li>✅ Advanced tax calculations</li>
-                            <li>✅ Save calculation history</li>
-                            <li>✅ Export to CSV</li>
-                            <li>✅ No ads</li>
-                        </ul>
-                    </div>
-
-                    <div className="space-y-3">
-                        <Link
-                            href="/"
-                            className="block w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 transition-all"
-                        >
-                            🧮 Start Using Pro Features
-                        </Link>
-                        <Link
-                            href="/marketing"
-                            className="block w-full border border-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-all"
-                        >
-                            📚 Back to Homepage
-                        </Link>
-                    </div>
-
-                    <p className="text-xs text-gray-500 mt-6">
-                        Need help? Contact support@tipmaster.com
-                    </p>
+                    <button
+                        onClick={() => setSelectedPlan('yearly')}
+                        className={`p-4 border rounded-lg text-center transition-all ${selectedPlan === 'yearly'
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                    >
+                        <div className="font-bold text-lg">Yearly</div>
+                        <div className="text-2xl font-bold text-gray-800">$25</div>
+                        <div className="text-sm text-gray-600">per year</div>
+                        <div className="text-xs text-green-600 mt-1">Save 30%</div>
+                    </button>
                 </div>
+
+                <div className="mb-6">
+                    <ul className="text-sm text-gray-600 space-y-2">
+                        <li className="flex items-center gap-2">✅ Different tips per person</li>
+                        <li className="flex items-center gap-2">✅ Tax calculations</li>
+                        <li className="flex items-center gap-2">✅ Save calculation history</li>
+                        <li className="flex items-center gap-2">✅ Export results</li>
+                        <li className="flex items-center gap-2">✅ No ads</li>
+                    </ul>
+                </div>
+
+                {!session && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                        <p className="text-sm text-yellow-800">
+                            You&apos;ll need to create an account to subscribe.
+                        </p>
+                    </div>
+                )}
+
+                {error && (
+                    <div className="text-red-600 text-sm mb-4 p-2 bg-red-50 rounded">
+                        {error}
+                    </div>
+                )}
+
+                <div className="flex gap-3">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-all"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleStripePayment}
+                        disabled={isProcessing}
+                        className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 transition-all"
+                    >
+                        {isProcessing ? 'Processing...' : `Subscribe - ${plans[selectedPlan].price}`}
+                    </button>
+                </div>
+
+                <p className="text-xs text-center text-gray-500 mt-4">
+                    🔒 Secure payment powered by Stripe • Cancel anytime
+                </p>
             </div>
         </div>
-    );
-}
-
-// Main component with Suspense boundary
-export default function PaymentSuccess() {
-    return (
-        <Suspense fallback={
-            <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-                <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <h2 className="text-xl font-bold text-gray-800 mb-2">Loading...</h2>
-                    <p className="text-gray-600">Preparing your payment details...</p>
-                </div>
-            </div>
-        }>
-            <PaymentSuccessContent />
-        </Suspense>
     );
 }
