@@ -612,7 +612,7 @@ function TipCalculator() {
           <div className="bg-green-50 rounded-2xl shadow-lg p-6 border border-green-200">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-xl">🎉</span>
-              <h3 className="font-semibold text-green-800">You're a Pro Member!</h3>
+              <h3 className="font-semibold text-green-800">You&apos;re a Pro Member!</h3>
             </div>
             <p className="text-sm text-green-600">Thank you for supporting TipMaster. Enjoy all premium features.</p>
             <div className="mt-3 text-xs text-green-500">
