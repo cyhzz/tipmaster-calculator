@@ -1,5 +1,4 @@
-// app/api/creem/webhook/route.js
-import { NextResponse } from 'next/server';
+// pages/api/creem/webhook.js
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 
@@ -16,76 +15,6 @@ function verifyWebhookSignature(payload, signature) {
         .digest('hex');
 
     return signature === expectedSignature;
-}
-
-export async function POST(request) {
-    try {
-        console.log('🔔 Creem webhook received');
-
-        const payload = await request.json();
-        const signature = request.headers.get('x-creem-signature');
-
-        if (!verifyWebhookSignature(payload, signature)) {
-            console.error('❌ Invalid webhook signature');
-            return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
-        }
-
-        console.log('✅ Webhook signature verified');
-        console.log('📦 Webhook event:', payload.event);
-        console.log('📝 Webhook data:', payload.data);
-
-        // Route to appropriate handler based on event type
-        switch (payload.event) {
-            case 'checkout.completed':
-                await handleCheckoutCompleted(payload.data);
-                break;
-
-            case 'payment.succeeded':
-                await handlePaymentSucceeded(payload.data);
-                break;
-
-            case 'payment.failed':
-                await handlePaymentFailed(payload.data);
-                break;
-
-            case 'subscription.created':
-                await handleSubscriptionCreated(payload.data);
-                break;
-
-            case 'subscription.cancelled':
-                await handleSubscriptionCancelled(payload.data);
-                break;
-
-            case 'subscription.renewed':
-                await handleSubscriptionRenewed(payload.data);
-                break;
-
-            case 'invoice.paid':
-                await handleInvoicePaid(payload.data);
-                break;
-
-            case 'invoice.payment_failed':
-                await handleInvoicePaymentFailed(payload.data);
-                break;
-
-            case 'payment.refunded':
-                await handlePaymentRefunded(payload.data);
-                break;
-
-            default:
-                console.log(`⚠️ Unhandled event type: ${payload.event}`);
-        }
-
-        console.log('🎉 Webhook processed successfully');
-        return NextResponse.json({ received: true });
-
-    } catch (error) {
-        console.error('💥 Webhook processing error:', error);
-        return NextResponse.json(
-            { error: 'Webhook processing failed: ' + error.message },
-            { status: 500 }
-        );
-    }
 }
 
 // Event Handlers
@@ -345,5 +274,80 @@ async function updateUserProStatusByOrder(order_id, isPro) {
                 updated_at: new Date().toISOString()
             })
             .eq('creem_customer_id', purchase.creem_customer_id);
+    }
+}
+
+export default async function handler(req, res) {
+    if (req.method === 'POST') {
+        try {
+            console.log('🔔 Creem webhook received');
+
+            const payload = req.body;
+            const signature = req.headers['x-creem-signature'];
+
+            if (!verifyWebhookSignature(payload, signature)) {
+                console.error('❌ Invalid webhook signature');
+                return res.status(403).json({ error: 'Invalid signature' });
+            }
+
+            console.log('✅ Webhook signature verified');
+            console.log('📦 Webhook event:', payload.event);
+            console.log('📝 Webhook data:', payload.data);
+
+            // Route to appropriate handler based on event type
+            switch (payload.event) {
+                case 'checkout.completed':
+                    await handleCheckoutCompleted(payload.data);
+                    break;
+
+                case 'payment.succeeded':
+                    await handlePaymentSucceeded(payload.data);
+                    break;
+
+                case 'payment.failed':
+                    await handlePaymentFailed(payload.data);
+                    break;
+
+                case 'subscription.created':
+                    await handleSubscriptionCreated(payload.data);
+                    break;
+
+                case 'subscription.cancelled':
+                    await handleSubscriptionCancelled(payload.data);
+                    break;
+
+                case 'subscription.renewed':
+                    await handleSubscriptionRenewed(payload.data);
+                    break;
+
+                case 'invoice.paid':
+                    await handleInvoicePaid(payload.data);
+                    break;
+
+                case 'invoice.payment_failed':
+                    await handleInvoicePaymentFailed(payload.data);
+                    break;
+
+                case 'payment.refunded':
+                    await handlePaymentRefunded(payload.data);
+                    break;
+
+                default:
+                    console.log(`⚠️ Unhandled event type: ${payload.event}`);
+            }
+
+            console.log('🎉 Webhook processed successfully');
+            return res.status(200).json({ received: true });
+
+        } catch (error) {
+            console.error('💥 Webhook processing error:', error);
+            return res.status(500).json(
+                { error: 'Webhook processing failed: ' + error.message }
+            );
+        }
+    } else {
+        // Handle other HTTP methods
+        res.setHeader('Allow', ['POST']);
+        return res.status(405).json({ error: `Method ${req.method} not allowed` });
     }
 }
