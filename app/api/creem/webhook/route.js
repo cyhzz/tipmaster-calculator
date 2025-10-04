@@ -38,7 +38,11 @@ export async function POST(request) {
         console.log('🔔 Creem webhook received');
 
         // Creem sends parameters as query string
+        // const query = Object.fromEntries(new URL(request.url).searchParams.entries());
+        const body = await request.json();
+        const { checkout_id, order_id, customer_id, subscription_id, product_id, request_id } = body;
         const query = Object.fromEntries(new URL(request.url).searchParams.entries());
+
 
         if (!await verifyCreemSignature(request)) {
             console.error('❌ Invalid Creem signature', query);
@@ -47,7 +51,7 @@ export async function POST(request) {
 
         console.log('✅ Signature verified', query);
 
-        const { checkout_id, order_id, customer_id, subscription_id, product_id, request_id } = query;
+        // const { checkout_id, order_id, customer_id, subscription_id, product_id, request_id } = query;
 
         // Retrieve or create user in Supabase based on customer_id/email
         let userId = null;
