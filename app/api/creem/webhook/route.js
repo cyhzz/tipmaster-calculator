@@ -36,6 +36,11 @@ export async function POST(request) {
 
         console.log('✅ Signature verified');
 
+        if (body.type !== 'checkout.compeleted') {
+            console.log('⏩ Ignored non-checkout event:', body.type);
+            return NextResponse.json({ skipped: true });
+        }
+
         // Extract relevant fields from webhook payload
         const customer_id = body.object.customer.id;
         const subscription_id = body.object.id;
