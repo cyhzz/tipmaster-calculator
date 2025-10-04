@@ -1,63 +1,127 @@
-// pages/api/creem/webhook.js
+// app/api/creem/checkout/route.js
+import { NextResponse } from 'next/server';
+import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
-// ... all your imports and functions ...
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
-// New configuration to disable the built-in body parser
-export const config = {
-    api: {
-        bodyParser: false,
-    },
-};
+// Verify Creem signature
+function verifyCreemSignature(query) {
+    const { checkout_id, order_id, customer_id, subscription_id, product_id, request_id, signature } = query;
 
-export async function POST(req) {
-    try {
-        console.log('🔔 Creem webhook received');
-        return new Response(JSON.stringify({ status: 'ok' }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-        });
-        // 1. Manually read the raw body stream
-        const rawBody = await getRawBody(req);
-        const signature = req.headers['x-creem-signature'];
+    const params = { checkout_id, customer_id, order_id, product_id, request_id, subscription_id };
+    const sortedKeys = Object.keys(params).sort();
+    const payload = sortedKeys.map(key => `${key}=${params[key] || ''}`).join('&');
 
-        // 2. The payload is the parsed JSON data
-        const payload = JSON.parse(rawBody.toString());
-
-        // 3. Update the signature verification to use the raw body
-        if (!verifyWebhookSignature(rawBody.toString(), signature)) {
-            console.error('❌ Invalid webhook signature');
-            return res.status(403).json({ error: 'Invalid signature' });
-        }
-
-        // ... rest of your original logic using 'payload' and 'res'
-        console.log('✅ Webhook signature verified');
-        // ... (switch case) ...
-
-        console.log('🎉 Webhook processed successfully');
-        return res.status(200).json({ received: true });
-
-    } catch (error) {
-        // ...
-    }
-}
-
-// You'll need a helper function to read the raw body stream
-// You can install 'raw-body' or use a simple implementation like this:
-function getRawBody(req) {
-    return new Promise((resolve, reject) => {
-        let body = '';
-        req.on('data', chunk => body += chunk.toString());
-        req.on('end', () => resolve(body));
-        req.on('error', reject);
-    });
-}
-
-// Update your verification function
-function verifyWebhookSignature(rawBody, signature) {
     const expectedSignature = crypto
         .createHmac('sha256', process.env.CREEM_WEBHOOK_SECRET)
-        .update(rawBody) // Use rawBody string here
+        .update(payload)
         .digest('hex');
 
     return signature === expectedSignature;
+}
+
+export async function POST(request) {
+    try {
+        console.log('🔔 Creem webhook received');
+
+        // Creem sends parameters as query string
+        const query = Object.fromEntries(new URL(request.url).searchParams.entries());
+
+        if (!verifyCreemSignature(query)) {
+            console.error('❌ Invalid Creem signature', query);
+            return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
+        }
+
+        console.log('✅ Signature verified', query);
+
+        const { checkout_id, order_id, customer_id, subscription_id, product_id, request_id } = query;
+
+        // Retrieve or create user in Supabase based on customer_id/email
+        let userId = null;
+        let userExists = false;
+
+        const { data: userProfile, error: userError } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('creem_customer_id', customer_id)
+            .single();
+
+        if (!userError && userProfile) {
+            userId = userProfile.id;
+            userExists = true;
+            console.log('✅ User found in Supabase:', userId);
+        } else {
+            console.log('⚠️ User not found, will save purchase without user_id');
+        }
+
+        // Determine plan type based on product_id (adjust IDs as needed)
+        const monthlyProductId = 'prod_monthly_123';
+        const yearlyProductId = 'prod_yearly_456';
+        const planType = product_id === yearlyProductId ? 'yearly' : 'monthly';
+
+        // Save purchase
+        console.log('💾 Saving purchase to Supabase...');
+        const purchaseData = {
+            user_id: userExists ? userId : null,
+            creem_customer_id: customer_id,
+            creem_order_id: order_id,
+            creem_checkout_id: checkout_id,
+            product_id,
+            subscription_id: subscription_id || null,
+            status: 'active',
+            plan_type: planType,
+            request_id: request_id || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+
+        const { data: purchaseResult, error: purchaseError } = await supabase
+            .from('purchases')
+            .insert(purchaseData)
+            .select();
+
+        if (purchaseError) {
+            console.error('❌ Error saving purchase:', purchaseError);
+            throw new Error(`Failed to save purchase: ${purchaseError.message}`);
+        }
+
+        console.log('✅ Purchase saved:', purchaseResult);
+
+        // Update user profile if exists
+        if (userExists && userId) {
+            console.log('👤 Updating user profile to pro...');
+            const { data: profileData, error: profileError } = await supabase
+                .from('user_profiles')
+                .upsert({
+                    id: userId,
+                    is_pro: true,
+                    plan_type: planType,
+                    creem_customer_id: customer_id,
+                    pro_since: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }, {
+                    onConflict: 'id'
+                })
+                .select();
+
+            if (profileError) {
+                console.error('❌ Error updating user profile:', profileError);
+            } else {
+                console.log('✅ User profile updated:', profileData);
+            }
+        }
+
+        console.log('🎉 Creem purchase processed successfully');
+        return NextResponse.json({ received: true });
+    } catch (error) {
+        console.error('💥 Creem webhook processing error:', error);
+        return NextResponse.json(
+            { error: 'Webhook processing failed: ' + error.message },
+            { status: 500 }
+        );
+    }
 }
