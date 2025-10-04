@@ -1,58 +1,76 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Verify Creem signature
+// ✅ Signature verification (optional but recommended)
 async function verifyCreemSignature(request, rawBody) {
     const signature = request.headers.get('creem-signature');
-    const webhookSecret = process.env.CREEM_WEBHOOK_SECRET;
+    const secret = process.env.CREEM_WEBHOOK_SECRET;
+    if (!signature || !secret) return false;
 
-    if (!signature) return false;
-
-    const expectedSignature = crypto
-        .createHmac('sha256', webhookSecret)
+    const expected = crypto
+        .createHmac('sha256', secret)
         .update(rawBody)
         .digest('hex');
 
-    return signature === expectedSignature;
+    return expected === signature;
 }
 
 export async function POST(request) {
     try {
-        console.log('🔔 Creem webhook received');
-
         const rawBody = await request.text();
         const body = JSON.parse(rawBody);
 
-        if (!await verifyCreemSignature(request, rawBody)) {
+        // 🔒 Verify signature if enabled
+        const valid = await verifyCreemSignature(request, rawBody);
+        if (!valid) {
             console.error('❌ Invalid Creem signature');
             return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
         }
 
-        console.log('✅ Signature verified');
+        const eventType = body.eventType;
+        console.log('📦 Creem event received:', eventType);
 
-        if (body.type !== 'checkout.compeleted') {
-            console.log('⏩ Ignored non-checkout event:', body.type);
+        // 🚫 Skip unrelated events
+        if (eventType !== 'checkout.completed') {
+            console.log('⏩ Ignored event:', eventType);
             return NextResponse.json({ skipped: true });
         }
 
-        // Extract relevant fields from webhook payload
-        const customer_id = body.object.customer.id;
-        const subscription_id = body.object.id;
-        const checkout_id = subscription_id; // if no separate checkout_id
-        const order_id = body.object.last_transaction?.order || null;
-        const product_id = body.object.items?.[0]?.product_id || null;
-        const status = body.object.status; // 'active', 'canceled', etc.
-        const plan_type = body.object.product.name.toLowerCase(); // e.g., 'monthly'
-        const request_id = body.id;
+        // ✅ Extract fields from your structure
+        const checkout = body.object;
+        const customer = checkout.customer;
+        const order = checkout.order;
+        const subscription = checkout.subscription;
+        const product = checkout.product;
 
-        // Check if user exists by creem_customer_id
-        let { data: userProfile, error: userError } = await supabase
+        const customer_id = customer.id;
+        const customer_email = customer.email;
+        const subscription_id = subscription?.id || null;
+        const checkout_id = checkout.id;
+        const order_id = order.id;
+        const product_id = product.id;
+        const status = checkout.status; // completed
+        const plan_type = product.name?.toLowerCase() || null;
+        const request_id = body.id;
+        const current_period_start = subscription?.current_period_start_date || null;
+        const current_period_end = subscription?.current_period_end_date || null;
+
+        console.log('🧾 Parsed checkout info:', {
+            customer_email,
+            customer_id,
+            subscription_id,
+            plan_type,
+            status
+        });
+
+        // ✅ 1. Upsert user profile
+        const { data: existingProfile } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('creem_customer_id', customer_id)
@@ -60,55 +78,51 @@ export async function POST(request) {
 
         let userId;
 
-        if (userError || !userProfile) {
-            // User doesn't exist, create profile
-            const { data: newUserProfile, error: createError } = await supabase
+        if (!existingProfile) {
+            console.log('👤 Creating new user profile');
+            const { data: newProfile, error: insertError } = await supabase
                 .from('user_profiles')
                 .insert({
-                    email: body.object.customer.email,
+                    email: customer_email,
                     creem_customer_id: customer_id,
                     plan_type,
-                    is_pro: status === 'active',
-                    pro_since: status === 'active' ? new Date().toISOString() : null,
+                    is_pro: true,
+                    pro_since: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 })
                 .select()
                 .single();
 
-            if (createError) {
-                console.error('❌ Error creating user profile:', createError);
-                throw new Error(createError.message);
+            if (insertError) {
+                console.error('❌ Failed to insert profile:', insertError);
+                throw insertError;
             }
 
-            userProfile = newUserProfile;
-            userId = userProfile.id;
-            console.log('✅ Created new user profile:', userId);
+            userId = newProfile.id;
         } else {
-            // User exists, update profile
+            console.log('🔄 Updating existing profile');
             const { data: updatedProfile, error: updateError } = await supabase
                 .from('user_profiles')
                 .update({
                     plan_type,
-                    is_pro: status === 'active',
-                    pro_since: status === 'active' ? (userProfile.pro_since || new Date().toISOString()) : userProfile.pro_since,
+                    is_pro: true,
+                    pro_since: existingProfile.pro_since || new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 })
-                .eq('id', userProfile.id)
+                .eq('id', existingProfile.id)
                 .select()
                 .single();
 
             if (updateError) {
-                console.error('❌ Error updating user profile:', updateError);
-                throw new Error(updateError.message);
+                console.error('❌ Failed to update profile:', updateError);
+                throw updateError;
             }
 
-            userProfile = updatedProfile;
-            userId = userProfile.id;
-            console.log('✅ Updated existing user profile:', userId);
+            userId = updatedProfile.id;
         }
 
-        // Save purchase record
-        const { data: purchaseResult, error: purchaseError } = await supabase
+        // ✅ 2. Insert purchase record
+        const { error: purchaseError } = await supabase
             .from('purchases')
             .insert({
                 user_id: userId,
@@ -122,20 +136,21 @@ export async function POST(request) {
                 request_id,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
-            })
-            .select();
+            });
 
         if (purchaseError) {
             console.error('❌ Error saving purchase:', purchaseError);
-            throw new Error(purchaseError.message);
+            throw purchaseError;
         }
 
-        console.log('✅ Purchase saved:', purchaseResult);
-
-        return NextResponse.json({ received: true });
+        console.log('✅ Purchase recorded successfully');
+        return NextResponse.json({ success: true });
 
     } catch (error) {
-        console.error('💥 Creem webhook processing error:', error);
-        return NextResponse.json({ error: 'Webhook processing failed: ' + error.message }, { status: 500 });
+        console.error('💥 Webhook error:', error);
+        return NextResponse.json(
+            { error: 'Webhook failed: ' + error.message },
+            { status: 500 }
+        );
     }
 }
