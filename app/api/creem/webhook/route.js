@@ -279,11 +279,14 @@ async function updateUserProStatusByOrder(order_id, isPro) {
 }
 
 
-export default async function handler(req, res) {
+export default async function handler(req) {
     if (req.method === 'POST') {
         try {
             console.log('🔔 Creem webhook received');
 
+            const body = await req.json();
+            console.log('Request body:', body);
+            return new Response('ok', { status: 200 });
             const payload = req.body;
             const signature = req.headers['x-creem-signature'];
 
