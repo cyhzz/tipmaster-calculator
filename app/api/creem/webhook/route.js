@@ -18,7 +18,7 @@ export async function verifyCreemSignature(query) {
     }
 
     // Retrieve the raw request body
-    const rawBody = await req.text();
+    const rawBody = await query.text();
 
     // Compute the HMAC-SHA256 hash
     const expectedSignature = crypto
