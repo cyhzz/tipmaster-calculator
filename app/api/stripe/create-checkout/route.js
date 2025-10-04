@@ -9,30 +9,36 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(request) {
-    console.log('🔔 Create-checkout endpoint called');
+    console.log('🔔 Creem create-checkout endpoint called');
 
     try {
         const session = await getServerSession(authOptions);
 
         if (!session) {
-            return NextResponse.json({ error: 'Unauthorized - Please sign in' }, { status: 401 });
+            return NextResponse.json(
+                { error: 'Unauthorized - Please sign in' },
+                { status: 401 }
+            );
         }
 
-        const { priceId, userEmail } = await request.json();
+        const { planId, userEmail } = await request.json();
 
-        if (!priceId || !userEmail) {
-            throw new Error('Missing required fields: priceId and userEmail are required');
+        if (!planId || !userEmail) {
+            throw new Error('Missing required fields: planId and userEmail are required');
         }
 
-        // First, ensure user exists in Supabase by calling our sync endpoint
+        // Ensure user exists in Supabase
         console.log('🔄 Ensuring user exists in Supabase...');
-        const syncResponse = await fetch(new URL('/api/auth/sync-user', process.env.NEXTAUTH_URL), {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Cookie': request.headers.get('cookie') || '' // Pass cookies for auth
-            },
-        });
+        const syncResponse = await fetch(
+            new URL('/api/auth/sync-user', process.env.NEXTAUTH_URL),
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Cookie': request.headers.get('cookie') || ''
+                },
+            }
+        );
 
         const syncData = await syncResponse.json();
 
@@ -43,39 +49,37 @@ export async function POST(request) {
         const supabaseUserId = syncData.userId;
         console.log('✅ Using Supabase user ID:', supabaseUserId);
 
-        // Now call your existing checkout route with the Supabase user ID
-        const checkoutUrl = new URL('/api/stripe/checkout', process.env.NEXTAUTH_URL);
-
-        const response = await fetch(checkoutUrl, {
-            method: 'POST',
+        // 👉 Call Creem API to create a checkout session
+        const creemResponse = await fetch("https://api.creem.io/v1/checkout", {
+            method: "POST",
             headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${process.env.CREEM_API_KEY}`
             },
             body: JSON.stringify({
-                priceId: priceId,
-                userId: supabaseUserId,
-                userEmail: userEmail,
-            }),
+                planId,             // The plan the user selected (monthly/yearly)
+                userEmail,          // User’s email
+                metadata: { userId: supabaseUserId } // optional metadata
+            })
         });
 
-        const data = await response.json();
+        const creemData = await creemResponse.json();
 
-        if (!response.ok) {
-            throw new Error(data.error || `Checkout failed with status: ${response.status}`);
+        if (!creemResponse.ok) {
+            throw new Error(creemData.error || `Creem checkout failed with status: ${creemResponse.status}`);
         }
 
-        if (!data.sessionId) {
-            throw new Error('No session ID returned from checkout endpoint');
+        if (!creemData.checkoutUrl) {
+            throw new Error("No checkout URL returned from Creem");
         }
 
-        console.log('✅ Checkout session created successfully:', data.sessionId);
-        return NextResponse.json({ sessionId: data.sessionId });
+        console.log("✅ Creem checkout created:", creemData.checkoutUrl);
+
+        // Return the checkoutUrl to frontend
+        return NextResponse.json({ checkoutUrl: creemData.checkoutUrl });
 
     } catch (error) {
-        console.error('💥 Create checkout error:', error);
-        return NextResponse.json(
-            { error: error.message },
-            { status: 500 }
-        );
+        console.error("💥 Creem create-checkout error:", error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

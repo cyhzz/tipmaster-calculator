@@ -1,10 +1,11 @@
 'use client';
 import { useState, useEffect } from 'react';
-import StripeProvider from '../components/StripeProvider';
-import PaymentModal from '../components/PaymentModal';
+// import StripeProvider from '../components/StripeProvider';
+import CreemProvider from '../components/CreemProvider.js';
+import PaymentModal from '../components/PaymentModal_Creem';
 import ShareModal from '../components/ShareModal';
 import { useSession, signIn, signOut } from 'next-auth/react';
-import { loadStripe } from '@stripe/stripe-js';
+// import { loadStripe } from '@stripe/stripe-js';
 
 function TipCalculator() {
   // Basic state
@@ -128,37 +129,37 @@ function TipCalculator() {
     handleSessionChange();
   }, [session]); // Only depend on session object
 
-  // // Real-time Pro status updates
-  // useEffect(() => {
-  //   let intervalId;
+  // Real-time Pro status updates
+  useEffect(() => {
+    let intervalId;
 
-  //   if (session?.user && isPro) {
-  //     // Check Pro status every 2 minutes to catch subscription changes
-  //     intervalId = setInterval(async () => {
-  //       try {
-  //         const response = await fetch('/api/auth/check-pro-status');
-  //         const data = await response.json();
+    if (session?.user && isPro) {
+      // Check Pro status every 2 minutes to catch subscription changes
+      intervalId = setInterval(async () => {
+        try {
+          const response = await fetch('/api/auth/check-pro-status');
+          const data = await response.json();
 
-  //         if (response.ok && data.isPro !== isPro) {
-  //           console.log('🔄 Pro status changed:', data.isPro);
-  //           setIsPro(data.isPro);
+          if (response.ok && data.isPro !== isPro) {
+            console.log('🔄 Pro status changed:', data.isPro);
+            setIsPro(data.isPro);
 
-  //           if (!data.isPro) {
-  //             setAdvancedMode(false); // Disable advanced mode if no longer Pro
-  //           }
-  //         }
-  //       } catch (error) {
-  //         console.error('Error checking Pro status:', error);
-  //       }
-  //     }, 120000); // 2 minutes
-  //   }
+            if (!data.isPro) {
+              setAdvancedMode(false); // Disable advanced mode if no longer Pro
+            }
+          }
+        } catch (error) {
+          console.error('Error checking Pro status:', error);
+        }
+      }, 120000); // 2 minutes
+    }
 
-  //   return () => {
-  //     if (intervalId) {
-  //       clearInterval(intervalId);
-  //     }
-  //   };
-  // }, [session, isPro]);
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [session, isPro]);
 
   // Validation
   const validateInputs = () => {
@@ -419,7 +420,7 @@ function TipCalculator() {
       }
 
       // Create checkout session
-      const response = await fetch('/api/stripe/checkout', {
+      const response = await fetch('/api/creem/checkout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -431,11 +432,20 @@ function TipCalculator() {
         }),
       });
 
-      const { sessionId } = await response.json();
+      // const { sessionId } = await response.json();
+      // // Redirect to Stripe Checkout
+      // const stripe = await loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+      // const { error } = await stripe.redirectToCheckout({ sessionId });
+      const data = await response.json();
 
-      // Redirect to Stripe Checkout
-      const stripe = await loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
-      const { error } = await stripe.redirectToCheckout({ sessionId });
+
+      console.log("Creem checkout response:", data);
+      if (response.ok && data.checkoutUrl) {
+        // Redirect to Creem checkout
+        window.location.href = data.checkoutUrl; // CHANGED TO CREEM
+      } else {
+        console.error('Creem checkout error:', data);
+      }
 
       if (error) {
         console.error('Stripe redirect error:', error);
@@ -731,7 +741,7 @@ function TipCalculator() {
             {/* Share Button */}
             <button
               onClick={handleShare}
-              disabled={bill <= 0 || !validateInputs()}
+              disabled={bill <= 0 || Object.keys(errors).length > 0}
               className="w-full mt-4 bg-white text-blue-600 py-3 rounded-lg font-semibold hover:bg-gray-100 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-all"
             >
               {isCopied ? '✅ Copied!' : '📤 Share Calculation'}
@@ -876,6 +886,7 @@ function TipCalculator() {
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         onSuccess={handlePaymentSuccess}
+        onPay={handleRealPayment}
       />
 
       {/* Share Modal */}
@@ -888,11 +899,14 @@ function TipCalculator() {
   );
 }
 
-// Wrap the main component with Stripe Provider
 export default function Page() {
   return (
-    <StripeProvider>
+    <CreemProvider>
       <TipCalculator />
-    </StripeProvider>
+    </CreemProvider>
   );
 }
+
+// export default function Page() {
+//   return <TipCalculator />;
+// }
