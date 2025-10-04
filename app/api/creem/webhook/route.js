@@ -277,6 +277,10 @@ async function updateUserProStatusByOrder(order_id, isPro) {
     }
 }
 
+export async function GET(request) {
+    return NextResponse.json({ ok: true, path: request.url });
+}
+
 export default async function handler(req, res) {
     if (req.method === 'POST') {
         try {
