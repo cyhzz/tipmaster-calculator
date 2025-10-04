@@ -11,7 +11,7 @@ const supabase = createClient(
 // Verify Creem signature
 export async function verifyCreemSignature(query) {
     const webhookSecret = process.env.CREEM_WEBHOOK_SECRET;
-    const signature = req.headers.get('creem-signature');
+    const signature = query.headers.get('creem-signature');
 
     if (!signature) {
         return new Response('Missing signature', { status: 400 });
