@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
         try {
             console.log('🔔 Creem webhook received');
-            return res.status(200).json({ received: true });
+            return new Response('ok', { status: 200 });;
             // 1. Manually read the raw body stream
             const rawBody = await getRawBody(req);
             const signature = req.headers['x-creem-signature'];
