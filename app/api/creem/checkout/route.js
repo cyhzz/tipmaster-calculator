@@ -21,8 +21,11 @@ export async function POST(request) {
                 'x-api-key': `${process.env.CREEM_SECRET_KEY}`,
             },
             body: JSON.stringify({
-                product_id
+                product_id,
                 // , customer_email: session.user.email,
+                customer: {
+                    email: session.user.email
+                },
             }),
         });
 
