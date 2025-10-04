@@ -40,7 +40,7 @@ export async function POST(request) {
         // Creem sends parameters as query string
         const query = Object.fromEntries(new URL(request.url).searchParams.entries());
 
-        if (!await verifyCreemSignature(query)) {
+        if (!await verifyCreemSignature(request)) {
             console.error('❌ Invalid Creem signature', query);
             return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
         }
