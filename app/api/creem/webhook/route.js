@@ -1,4 +1,3 @@
-// /app/api/creem/checkout/route.js
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
@@ -9,13 +8,11 @@ const supabase = createClient(
 );
 
 // Verify Creem signature
-export function verifyCreemSignature(headers, rawBody) {
+async function verifyCreemSignature(request, rawBody) {
+    const signature = request.headers.get('creem-signature');
     const webhookSecret = process.env.CREEM_WEBHOOK_SECRET;
-    const signature = headers.get('creem-signature');
 
-    if (!signature) {
-        return false;
-    }
+    if (!signature) return false;
 
     const expectedSignature = crypto
         .createHmac('sha256', webhookSecret)
@@ -29,56 +26,86 @@ export async function POST(request) {
     try {
         console.log('🔔 Creem webhook received');
 
-        // Read body once
         const rawBody = await request.text();
-        let body;
-        try {
-            body = JSON.parse(rawBody);
-        } catch {
-            return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
-        }
+        const body = JSON.parse(rawBody);
 
-        // Verify signature
-        if (!verifyCreemSignature(request.headers, rawBody)) {
-            console.error('❌ Invalid Creem signature', body.id);
+        if (!await verifyCreemSignature(request, rawBody)) {
+            console.error('❌ Invalid Creem signature');
             return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
         }
 
-        console.log('✅ Signature verified:', body.id);
+        console.log('✅ Signature verified');
 
-        // Extract nested fields from Creem payload
-        const customer_id = body.object.customer?.id;
+        // Extract relevant fields from webhook payload
+        const customer_id = body.object.customer.id;
         const subscription_id = body.object.id;
-        const checkout_id = subscription_id; // fallback
+        const checkout_id = subscription_id; // if no separate checkout_id
         const order_id = body.object.last_transaction?.order || null;
-        const product_id = body.object.items?.[0]?.product_id || body.object.product?.id || null;
-        const status = body.object.status;
-        const plan_type = body.object.product?.name?.toLowerCase() || 'monthly';
+        const product_id = body.object.items?.[0]?.product_id || null;
+        const status = body.object.status; // 'active', 'canceled', etc.
+        const plan_type = body.object.product.name.toLowerCase(); // e.g., 'monthly'
         const request_id = body.id;
 
-        if (!customer_id || !product_id) {
-            throw new Error('Missing required customer_id or product_id');
-        }
-
-        // Check user in Supabase
-        let userId = null;
-        let userExists = false;
-        const { data: userProfile } = await supabase
+        // Check if user exists by creem_customer_id
+        let { data: userProfile, error: userError } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('creem_customer_id', customer_id)
             .single();
 
-        if (userProfile) {
+        let userId;
+
+        if (userError || !userProfile) {
+            // User doesn't exist, create profile
+            const { data: newUserProfile, error: createError } = await supabase
+                .from('user_profiles')
+                .insert({
+                    email: body.object.customer.email,
+                    creem_customer_id: customer_id,
+                    subscription_id,
+                    plan_type,
+                    is_pro: status === 'active',
+                    pro_since: status === 'active' ? new Date().toISOString() : null,
+                    updated_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+
+            if (createError) {
+                console.error('❌ Error creating user profile:', createError);
+                throw new Error(createError.message);
+            }
+
+            userProfile = newUserProfile;
             userId = userProfile.id;
-            userExists = true;
-            console.log('✅ User found in Supabase:', userId);
+            console.log('✅ Created new user profile:', userId);
         } else {
-            console.log('⚠️ User not found, saving purchase without user_id');
+            // User exists, update profile
+            const { data: updatedProfile, error: updateError } = await supabase
+                .from('user_profiles')
+                .update({
+                    subscription_id,
+                    plan_type,
+                    is_pro: status === 'active',
+                    pro_since: status === 'active' ? (userProfile.pro_since || new Date().toISOString()) : userProfile.pro_since,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', userProfile.id)
+                .select()
+                .single();
+
+            if (updateError) {
+                console.error('❌ Error updating user profile:', updateError);
+                throw new Error(updateError.message);
+            }
+
+            userProfile = updatedProfile;
+            userId = userProfile.id;
+            console.log('✅ Updated existing user profile:', userId);
         }
 
-        // Save purchase
-        const { error: purchaseError } = await supabase
+        // Save purchase record
+        const { data: purchaseResult, error: purchaseError } = await supabase
             .from('purchases')
             .insert({
                 user_id: userId,
@@ -91,45 +118,21 @@ export async function POST(request) {
                 plan_type,
                 request_id,
                 created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            });
+                updated_at: new Date().toISOString()
+            })
+            .select();
 
         if (purchaseError) {
-            throw new Error(`Failed to save purchase: ${purchaseError.message}`);
+            console.error('❌ Error saving purchase:', purchaseError);
+            throw new Error(purchaseError.message);
         }
 
-        console.log('✅ Purchase saved for customer_id:', customer_id);
+        console.log('✅ Purchase saved:', purchaseResult);
 
-        // Update or create user profile
-        if (userExists && userId) {
-            const { error: profileError } = await supabase
-                .from('user_profiles')
-                .upsert(
-                    {
-                        id: userId,
-                        is_pro: true,
-                        plan_type,
-                        creem_customer_id: customer_id,
-                        pro_since: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
-                    },
-                    { onConflict: 'id' }
-                );
-
-            if (profileError) {
-                console.error('❌ Error updating user profile:', profileError);
-            } else {
-                console.log('✅ User profile updated:', userId);
-            }
-        }
-
-        console.log('🎉 Creem webhook processed successfully');
         return NextResponse.json({ received: true });
+
     } catch (error) {
         console.error('💥 Creem webhook processing error:', error);
-        return NextResponse.json(
-            { error: 'Webhook processing failed: ' + error.message },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: 'Webhook processing failed: ' + error.message }, { status: 500 });
     }
 }

@@ -66,9 +66,11 @@ export async function POST(req) {
             .from('user_profiles')
             .upsert({
                 id: supabaseUserId,
-                email: session.user.email,
-                name: session.user.name,
-                avatar: session.user.image,
+                email,
+                creem_customer_id: null,
+                plan_type: 'monthly',   // default
+                is_pro: false,
+                pro_since: null,
                 updated_at: new Date().toISOString()
             }, {
                 onConflict: 'id'

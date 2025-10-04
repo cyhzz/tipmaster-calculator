@@ -12,26 +12,21 @@ export async function GET(req) {
         const session = await getServerSession(authOptions);
 
         if (!session) {
-            return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-                status: 401
-            });
+            return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
         }
 
-        console.log('🔍 Checking Pro status for:', session.user.email);
+        const email = session.user.email;
+        console.log('🔍 Checking Pro status for:', email);
 
         // Get user profile from Supabase
         const { data: profile, error } = await supabase
             .from('user_profiles')
-            .select('is_pro, plan_type, pro_since, stripe_customer_id')
-            .eq('email', session.user.email)
+            .select('is_pro, plan_type, pro_since')
+            .eq('email', email)
             .single();
 
-        console.log('📊 Profile data from Supabase:', profile);
-        console.log('❌ Error from Supabase:', error);
-
         if (error) {
-            console.error('❌ Error fetching user profile:', error);
-            // User might not exist yet, return not pro
+            console.warn('⚠️ User profile not found or error fetching:', error);
             return new Response(JSON.stringify({
                 isPro: false,
                 planType: null,
@@ -40,14 +35,10 @@ export async function GET(req) {
             }), { status: 200 });
         }
 
-        const isProUser = profile?.is_pro || false;
-        console.log('✅ Final Pro status:', isProUser);
-
         return new Response(JSON.stringify({
-            isPro: isProUser,
+            isPro: profile?.is_pro || false,
             planType: profile?.plan_type || null,
             proSince: profile?.pro_since || null,
-            stripeCustomerId: profile?.stripe_customer_id || null,
             message: 'Pro status checked successfully'
         }), { status: 200 });
 
