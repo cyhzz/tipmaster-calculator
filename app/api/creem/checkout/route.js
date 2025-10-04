@@ -22,7 +22,7 @@ export async function POST(request) {
             },
             body: JSON.stringify({
                 product_id
-                , customer_email: session.user.email,
+                // , customer_email: session.user.email,
             }),
         });
 
