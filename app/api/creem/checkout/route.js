@@ -1,8 +1,14 @@
 // app/api/creem/checkout/route.js
 import { NextResponse } from 'next/server';
+import { getServerSession } from "next-auth";
+import { authOptions } from "../../auth/[...nextauth]/route";
 
 export async function POST(request) {
     try {
+        const session = await getServerSession(authOptions);
+        if (!session) {
+            return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+        }
         const { product_id, userId, userEmail } = await request.json();
 
         console.log("Checkout request:", { product_id, userId, userEmail });
@@ -16,7 +22,7 @@ export async function POST(request) {
             },
             body: JSON.stringify({
                 product_id
-                , customer_email: userEmail,
+                , customer_email: session.user.email,
             }),
         });
 
