@@ -285,56 +285,56 @@ export default async function handler(req, res) {
             const payload = req.body;
             const signature = req.headers['x-creem-signature'];
 
-            if (!verifyWebhookSignature(payload, signature)) {
-                console.error('❌ Invalid webhook signature');
-                return res.status(403).json({ error: 'Invalid signature' });
-            }
+            // if (!verifyWebhookSignature(payload, signature)) {
+            //     console.error('❌ Invalid webhook signature');
+            //     return res.status(403).json({ error: 'Invalid signature' });
+            // }
 
-            console.log('✅ Webhook signature verified');
-            console.log('📦 Webhook event:', payload.event);
-            console.log('📝 Webhook data:', payload.data);
+            // console.log('✅ Webhook signature verified');
+            // console.log('📦 Webhook event:', payload.event);
+            // console.log('📝 Webhook data:', payload.data);
 
-            // Route to appropriate handler based on event type
-            switch (payload.event) {
-                case 'checkout.completed':
-                    await handleCheckoutCompleted(payload.data);
-                    break;
+            // // Route to appropriate handler based on event type
+            // switch (payload.event) {
+            //     case 'checkout.completed':
+            //         await handleCheckoutCompleted(payload.data);
+            //         break;
 
-                case 'payment.succeeded':
-                    await handlePaymentSucceeded(payload.data);
-                    break;
+            //     case 'payment.succeeded':
+            //         await handlePaymentSucceeded(payload.data);
+            //         break;
 
-                case 'payment.failed':
-                    await handlePaymentFailed(payload.data);
-                    break;
+            //     case 'payment.failed':
+            //         await handlePaymentFailed(payload.data);
+            //         break;
 
-                case 'subscription.created':
-                    await handleSubscriptionCreated(payload.data);
-                    break;
+            //     case 'subscription.created':
+            //         await handleSubscriptionCreated(payload.data);
+            //         break;
 
-                case 'subscription.cancelled':
-                    await handleSubscriptionCancelled(payload.data);
-                    break;
+            //     case 'subscription.cancelled':
+            //         await handleSubscriptionCancelled(payload.data);
+            //         break;
 
-                case 'subscription.renewed':
-                    await handleSubscriptionRenewed(payload.data);
-                    break;
+            //     case 'subscription.renewed':
+            //         await handleSubscriptionRenewed(payload.data);
+            //         break;
 
-                case 'invoice.paid':
-                    await handleInvoicePaid(payload.data);
-                    break;
+            //     case 'invoice.paid':
+            //         await handleInvoicePaid(payload.data);
+            //         break;
 
-                case 'invoice.payment_failed':
-                    await handleInvoicePaymentFailed(payload.data);
-                    break;
+            //     case 'invoice.payment_failed':
+            //         await handleInvoicePaymentFailed(payload.data);
+            //         break;
 
-                case 'payment.refunded':
-                    await handlePaymentRefunded(payload.data);
-                    break;
+            //     case 'payment.refunded':
+            //         await handlePaymentRefunded(payload.data);
+            //         break;
 
-                default:
-                    console.log(`⚠️ Unhandled event type: ${payload.event}`);
-            }
+            //     default:
+            //         console.log(`⚠️ Unhandled event type: ${payload.event}`);
+            // }
 
             console.log('🎉 Webhook processed successfully');
             return res.status(200).json({ received: true });
