@@ -1,5 +1,6 @@
 // app/api/creem/checkout/route.js
 import { NextResponse } from 'next/server';
+import { getServerSession } from "next-auth";
 
 export async function POST(request) {
     try {
