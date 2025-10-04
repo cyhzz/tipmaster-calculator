@@ -278,9 +278,9 @@ async function updateUserProStatusByOrder(order_id, isPro) {
     }
 }
 
-export async function GET(request) {
-    return NextResponse.json({ ok: true, path: request.url });
-}
+// export async function GET(request) {
+//     return NextResponse.json({ ok: true, path: request.url });
+// }
 
 export default async function handler(req, res) {
     if (req.method === 'POST') {
@@ -352,6 +352,7 @@ export default async function handler(req, res) {
         }
     } else {
         // Handle other HTTP methods
+        console.log(`❌ Method ${req.method} not allowed`);
         res.setHeader('Allow', ['POST']);
         return res.status(405).json({ error: `Method ${req.method} not allowed` });
     }
