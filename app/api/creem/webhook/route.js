@@ -62,7 +62,6 @@ export async function POST(request) {
                 .insert({
                     email: body.object.customer.email,
                     creem_customer_id: customer_id,
-                    subscription_id,
                     plan_type,
                     is_pro: status === 'active',
                     pro_since: status === 'active' ? new Date().toISOString() : null,
@@ -84,7 +83,6 @@ export async function POST(request) {
             const { data: updatedProfile, error: updateError } = await supabase
                 .from('user_profiles')
                 .update({
-                    subscription_id,
                     plan_type,
                     is_pro: status === 'active',
                     pro_since: status === 'active' ? (userProfile.pro_since || new Date().toISOString()) : userProfile.pro_since,
