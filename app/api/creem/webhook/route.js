@@ -9,17 +9,26 @@ const supabase = createClient(
 );
 
 // Verify Creem signature
-function verifyCreemSignature(query) {
-    const { checkout_id, order_id, customer_id, subscription_id, product_id, request_id, signature } = query;
+export async function verifyCreemSignature(query) {
+    const webhookSecret = process.env.CREEM_WEBHOOK_SECRET;
+    const signature = req.headers.get('creem-signature');
 
-    const params = { checkout_id, customer_id, order_id, product_id, request_id, subscription_id };
-    const sortedKeys = Object.keys(params).sort();
-    const payload = sortedKeys.map(key => `${key}=${params[key] || ''}`).join('&');
+    if (!signature) {
+        return new Response('Missing signature', { status: 400 });
+    }
 
+    // Retrieve the raw request body
+    const rawBody = await req.text();
+
+    // Compute the HMAC-SHA256 hash
     const expectedSignature = crypto
-        .createHmac('sha256', process.env.CREEM_WEBHOOK_SECRET)
-        .update(payload)
+        .createHmac('sha256', webhookSecret)
+        .update(rawBody)
         .digest('hex');
+
+    // Compare the computed signature with the provided signature
+    // if (computedSignature !== signature) {
+    //     return new Response('Invalid signature', { status: 400 });
 
     return signature === expectedSignature;
 }
@@ -31,7 +40,7 @@ export async function POST(request) {
         // Creem sends parameters as query string
         const query = Object.fromEntries(new URL(request.url).searchParams.entries());
 
-        if (!verifyCreemSignature(query)) {
+        if (!await verifyCreemSignature(query)) {
             console.error('❌ Invalid Creem signature', query);
             return NextResponse.json({ error: 'Invalid signature' }, { status: 403 });
         }
