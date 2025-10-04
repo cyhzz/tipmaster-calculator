@@ -1,6 +1,7 @@
 // pages/api/creem/webhook.js
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
