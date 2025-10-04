@@ -9,7 +9,7 @@ export const config = {
     },
 };
 
-export default async function handler(req, res) {
+export async function handler(req, res) {
     if (req.method === 'POST') {
         try {
             console.log('🔔 Creem webhook received');
