@@ -66,13 +66,13 @@ export async function POST(req) {
                 {
                     id: supabaseUserId,
                     email,
-                    creem_customer_id: null,
-                    plan_type: "monthly", // default placeholder
-                    is_pro: false,
-                    pro_since: null,
+                    // creem_customer_id: null,
+                    // plan_type: "monthly", // default placeholder
+                    // is_pro: false,
+                    // pro_since: null,
                     updated_at: new Date().toISOString(),
                 },
-                { onConflict: "id" }
+                { onConflict: "email" }
             );
 
         if (profileError) {
