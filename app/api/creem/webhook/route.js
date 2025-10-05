@@ -107,7 +107,7 @@ async function handleSubscriptionCreated(body) {
     const { data: existingProfile } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('creem_customer_id', customer_id)
+        .eq('email', customer_email)
         .single();
 
     let userId;
@@ -138,12 +138,13 @@ async function handleSubscriptionCreated(body) {
         const { data: updatedProfile, error: updateError } = await supabase
             .from('user_profiles')
             .update({
+                creem_customer_id: customer_id,
                 plan_type,
                 is_pro: true,
                 pro_since: existingProfile.pro_since || new Date().toISOString(),
                 updated_at: new Date().toISOString()
             })
-            .eq('id', existingProfile.id)
+            .eq('email', customer_email)
             .select()
             .single();
 
