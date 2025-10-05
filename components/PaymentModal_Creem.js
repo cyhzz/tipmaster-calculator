@@ -9,8 +9,8 @@ export default function PaymentModal({ isOpen, onClose, onSuccess }) {
     const [selectedPlan, setSelectedPlan] = useState('monthly');
 
     const plans = {
-        monthly: { price: '$5', id: 'prod_1zpMiQEdT1NRncHu7hbWn3' },
-        // monthly: { price: '$5', id: 'prod_2AnhxKDdUE3cRdtCuS6uM7' },
+        // monthly: { price: '$5', id: 'prod_1zpMiQEdT1NRncHu7hbWn3' },
+        monthly: { price: '$5', id: 'prod_2AnhxKDdUE3cRdtCuS6uM7' },
         yearly: { price: '$25', id: 'prod_11q7BxvhA9vU4OR8vYTsiY' }
     };
 
