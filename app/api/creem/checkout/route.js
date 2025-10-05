@@ -26,8 +26,6 @@ export async function POST(request) {
                 customer: {
                     email: session.user.email
                 },
-                success_url: "https://tipmaster-calculator.vercel.app/",
-                cancel_url: "https://tipmaster-calculator.vercel.app/"
             }),
         });
 
